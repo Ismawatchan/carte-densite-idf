@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+html_code = """<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8" />
@@ -35,45 +35,69 @@
             maxZoom: 19
         }).addTo(map);
 
+        // 1. Villes / Communes : contour intermédiaire (plus fin et plus doux que les départements)
         const communesLayer = L.geoJSON(null, {
             style: {
-                color: '#334155',
-                weight: 1,
-                opacity: 0.9,
+                color: '#475569',
+                weight: 1.1,
+                opacity: 0.7,
                 fillColor: '#94a3b8',
-                fillOpacity: 0.14
+                fillOpacity: 0.10
             },
             onEachFeature: (feature, layer) => {
                 const nom = feature.properties && feature.properties.nom ? feature.properties.nom : '';
                 if (nom) layer.bindTooltip(nom, { sticky: true });
 
-                layer.on('click', (e) => {
-                    L.DomEvent.stopPropagation(e);
-                    outlineZonesOfCity(feature, layer);
+                layer.on({
+                    mouseover: (e) => {
+                        e.target.setStyle({
+                            color: '#1e293b',
+                            weight: 2,
+                            fillOpacity: 0.22
+                        });
+                    },
+                    mouseout: (e) => {
+                        communesLayer.resetStyle(e.target);
+                    },
+                    click: (e) => {
+                        L.DomEvent.stopPropagation(e);
+                        outlineZonesOfCity(feature, layer);
+                    }
                 });
             }
         }).addTo(map);
 
-        // Limites des 8 départements (traits épais et nets)
-        const departementsLayer = L.geoJSON(null, {
+        // 2. Départements : double tracé (halo blanc + trait épais bleu nuit/indigo) pour une séparation très marquante
+        const departementsHaloLayer = L.geoJSON(null, {
             interactive: false,
             style: {
-                color: '#0f172a',
-                weight: 3,
-                opacity: 0.95,
+                color: '#ffffff',
+                weight: 7,
+                opacity: 0.9,
                 fill: false
             }
         }).addTo(map);
 
-        // Découpage en zones / quartiers de la ville cliquée
+        const departementsLayer = L.geoJSON(null, {
+            interactive: false,
+            style: {
+                color: '#1e1b4b',
+                weight: 4,
+                opacity: 1,
+                fill: false
+            }
+        }).addTo(map);
+
+        // 3. Quartiers / Arrondissements : contour discret et léger (fin, pointillés légers, faible opacité)
         const zonesLayer = L.geoJSON(null, {
             interactive: false,
             style: {
-                color: '#dc2626',
-                weight: 2,
-                dashArray: '5, 4',
-                fillColor: '#ef4444',
-                fillOpacity: 0.12
+                color: '#64748b',
+                weight: 1,
+                opacity: 0.65,
+                dashArray: '3, 3',
+                fillColor: '#3b82f6',
+                fillOpacity: 0.08
             }
         }).addTo(map);
 
@@ -111,7 +135,12 @@
             communesLayer.addData({ type: 'FeatureCollection', features: allCommunes });
 
             const allDepts = deptResults.filter(d => d && d.geometry);
-            departementsLayer.addData({ type: 'FeatureCollection', features: allDepts });
+            const deptGeoJson = { type: 'FeatureCollection', features: allDepts };
+            departementsHaloLayer.addData(deptGeoJson);
+            departementsLayer.addData(deptGeoJson);
+
+            departementsHaloLayer.bringToFront();
+            departementsLayer.bringToFront();
 
             if (communesLayer.getLayers().length > 0) {
                 map.fitBounds(communesLayer.getBounds(), { padding: [20, 20] });
@@ -145,11 +174,13 @@
             const code = String(p.code || '');
             const dept = String(p.codeDepartement || code.substring(0, 2));
 
-            // Paris (75) : découpage en quartiers administratifs
+            // Paris (75) : découpage discret en quartiers administratifs
             if (dept === '75' && parisQuartiers && Array.isArray(parisQuartiers.features)) {
                 const qList = parisQuartiers.features.filter(qf => qf.geometry);
                 if (qList.length > 0) {
                     zonesLayer.addData({ type: 'FeatureCollection', features: qList });
+                    departementsHaloLayer.bringToFront();
+                    departementsLayer.bringToFront();
                     return;
                 }
             }
@@ -187,6 +218,8 @@
                     });
                     if (polys.length > 0) {
                         zonesLayer.addData({ type: 'FeatureCollection', features: polys });
+                        departementsHaloLayer.bringToFront();
+                        departementsLayer.bringToFront();
                         return;
                     }
                 }
@@ -194,9 +227,17 @@
 
             // Découpage en zones si aucun contour de quartier n'est renvoyé
             zonesLayer.addData({ type: 'FeatureCollection', features: splitBoundsIntoZones(feature) });
+            departementsHaloLayer.bringToFront();
+            departementsLayer.bringToFront();
         }
 
         loadIleDeFrance();
     </script>
 </body>
 </html>
+"""
+
+with open("index.html", "w", encoding="utf-8") as f:
+    f.write(html_code)
+
+print("Fichier index.html généré avec hiérarchie visuelle des frontières.")
