@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Densité de Population en Île-de-France (8 Départements + Quartiers)</title>
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      padding: 12px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      z-index: 1000;
+    }
+    .title-group h1 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .badge {
+      background: #3b82f6;
+      color: white;
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .title-group p {
+      font-size: 0.78rem;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+    select, input[type="text"], button {
+      background: #0f172a;
+      border: 1px solid #334155;
+      color: #f8fafc;
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-family: inherit;
+      outline: none;
+      transition: all 0.2s;
+    }
+    select:focus, input[type="text"]:focus {
+      border-color: #3b82f6;
+    }
+    button {
+      cursor: pointer;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    button:hover {
+      background: #334155;
+    }
+    button.active {
+      background: #2563eb;
+      border-color: #3b82f6;
+      color: #fff;
+    }
+    #main-container {
+      position: relative;
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+    #map {
+      flex: 1;
+      height: 100%;
+      background: #0b1120;
+    }
+    /* Loader Overlay */
+    #loader {
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.92);
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      backdrop-filter: blur(4px);
+    }
+    .spinner {
+      width: 42px;
+      height: 42px;
+      border: 4px solid #334155;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loader-text {
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: #e2e8f0;
+    }
+    #loader-sub {
+      font-size: 0.8rem;
+      color: #94a3b8;
+    }
+
+    /* Legend */
+    .legend {
+      background: rgba(30, 41, 59, 0.94);
+      backdrop-filter: blur(8px);
+      border: 1px solid #334155;
+      padding: 12px 14px;
+      border-radius: 10px;
+      color: #f8fafc;
+      font-size: 0.78rem;
+      line-height: 1.5;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+      min-width: 195px;
+    }
+    .legend h4 {
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 4px;
+      transition: background 0.15s;
+    }
+    .legend-item:hover {
+      background: rgba(255,255,255,0.08);
+    }
+    .legend-item.dimmed {
+      opacity: 0.35;
+    }
+    .legend-color {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      flex-shrink: 0;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+
+    /* Info Sidebar */
+    #sidebar {
+      width: 340px;
+      background: #1e293b;
+      border-left: 1px solid #334155;
+      padding: 18px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      z-index: 900;
+      transition: transform 0.25s ease;
+    }
+    #sidebar.hidden {
+      display: none;
+    }
+    .card {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 14px;
+    }
+    .card h2 {
+      font-size: 1.05rem;
+      color: #f8fafc;
+      margin-bottom: 4px;
+    }
+    .card .subtitle {
+      font-size: 0.78rem;
+      color: #94a3b8;
+      margin-bottom: 12px;
+    }
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .stat-box {
+      background: #1e293b;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+    }
+    .stat-label {
+      font-size: 0.7rem;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .stat-value {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #f8fafc;
+      margin-top: 2px;
+    }
+    .quartier-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .quartier-item {
+      background: #1e293b;
+      border: 1px solid #334155;
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .quartier-tag {
+      font-size: 0.7rem;
+      background: #334155;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #cbd5e1;
+    }
+    .leaflet-tooltip.custom-tooltip {
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid #475569;
+      color: #f8fafc;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.8rem;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.45);
+    }
+    .leaflet-tooltip-top:before { border-top-color: #475569; }
+    .quartier-label {
+      background: rgba(15, 23, 42, 0.82);
+      border: 1px dashed #60a5fa;
+      color: #e0f2fe;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      white-space: nowrap;
+      pointer-events: none;
+      text-align: center;
+    }
+    @media (max-width: 768px) {
+      #sidebar {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        height: 45%;
+        border-left: none;
+        border-top: 1px solid #334155;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="title-group">
+    <h1>Carte Choroplèthe — Densité de Population en Île-de-France <span class="badge">8 Départements</span></h1>
+    <p>1 287 communes & 20 arrondissements parisiens • Contours officiels INSEE / IGN & détourage des quartiers au zoom</p>
+  </div>
+  <div class="controls">
+    <select id="dept-filter" title="Filtrer par département">
+      <option value="ALL">Toute l'Île-de-France (8 dépts)</option>
+      <option value="75">75 — Paris (20 arrondissements)</option>
+      <option value="92">92 — Hauts-de-Seine</option>
+      <option value="93">93 — Seine-Saint-Denis</option>
+      <option value="94">94 — Val-de-Marne</option>
+      <option value="77">77 — Seine-et-Marne</option>
+      <option value="78">78 — Yvelines</option>
+      <option value="91">91 — Essonne</option>
+      <option value="95">95 — Val-d'Oise</option>
+    </select>
+
+    <input type="text" id="search-input" placeholder="Rechercher ville, arrondissement..." list="communes-datalist" />
+    <datalist id="communes-datalist"></datalist>
+
+    <button id="btn-quartiers" class="active" title="Afficher/masquer le détourage des quartiers (zoom >= 13 ou clic sur une ville)">
+      🏘️ Quartiers (Auto-zoom)
+    </button>
+    <button id="btn-reset" title="Recentrer sur l'Île-de-France">
+      🔄 Vue globale
+    </button>
+  </div>
+</header>
+
+<div id="main-container">
+  <div id="loader">
+    <div class="spinner"></div>
+    <div id="loader-text">Chargement des contours officiels de l'Île-de-France...</div>
+    <div id="loader-sub">Interrogation de geo.api.gouv.fr (75, 77, 78, 91, 92, 93, 94, 95)</div>
+  </div>
+
+  <div id="map"></div>
+
+  <aside id="sidebar">
+    <div class="card" id="region-summary">
+      <h2>Île-de-France (Vue d'ensemble)</h2>
+      <div class="subtitle">Cliquez sur une commune ou un arrondissement pour inspecter sa densité et détourer ses quartiers.</div>
+      <div class="stat-grid">
+        <div class="stat-box">
+          <div class="stat-label">Territoires</div>
+          <div class="stat-value" id="stat-count">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Population</div>
+          <div class="stat-value" id="stat-pop">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Superficie</div>
+          <div class="stat-value" id="stat-area">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Densité moyenne</div>
+          <div class="stat-value" id="stat-dens">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="selected-details" style="display:none;">
+      <h2 id="sel-name">—</h2>
+      <div class="subtitle" id="sel-dept">—</div>
+      <div class="stat-grid">
+        <div class="stat-box">
+          <div class="stat-label">Densité</div>
+          <div class="stat-value" id="sel-dens" style="color:#60a5fa;">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Rang Régional</div>
+          <div class="stat-value" id="sel-rank">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Population</div>
+          <div class="stat-value" id="sel-pop">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Superficie</div>
+          <div class="stat-value" id="sel-area">—</div>
+        </div>
+      </div>
+
+      <div style="margin-top:14px;">
+        <div style="font-size:0.8rem; font-weight:600; color:#e2e8f0; display:flex; justify-content:space-between;">
+          <span>Détourage des quartiers / secteurs</span>
+          <span id="q-source-badge" style="font-size:0.68rem; color:#38bdf8;">Actif sur carte</span>
+        </div>
+        <ul class="quartier-list" id="sel-quartiers"></ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="font-size:0.78rem; font-weight:600; color:#cbd5e1; margin-bottom:6px;">💡 Comment lire le détourage des quartiers ?</div>
+      <p style="font-size:0.75rem; color:#94a3b8; line-height:1.45;">
+        • <strong>Paris (75) :</strong> Les 80 quartiers administratifs officiels sont détourés directement depuis l'OpenData de la Ville de Paris.<br>
+        • <strong>Communes (77-95) :</strong> Lors d'un clic sur une ville ou d'un zoom (niveau ≥ 13), les quartiers réels (OpenStreetMap Overpass API) ou secteurs infracommunaux sont détourés en pointillés cyan.
+      </p>
+    </div>
+  </aside>
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+  // 1. Échelle de densité adaptée à toute l'Île-de-France (du rural 77 à Paris 11e > 40 000 hab/km²)
+  const BINS = [
+    { min: 0,     max: 500,   color: '#fef9c3', label: '< 500 hab/km² (Rural)' },
+    { min: 500,   max: 2000,  color: '#fde047', label: '500 – 2 000 (Périurbain)' },
+    { min: 2000,  max: 5000,  color: '#fdba74', label: '2 000 – 5 000 (Urbain modéré)' },
+    { min: 5000,  max: 10000, color: '#fb923c', label: '5 000 – 10 000 (Urbain dense)' },
+    { min: 10000, max: 18000, color: '#f97316', label: '10 000 – 18 000 (Très dense)' },
+    { min: 18000, max: 28000, color: '#dc2626', label: '18 000 – 28 000 (Hyper-dense)' },
+    { min: 28000, max: Infinity, color: '#7f1d1d', label: '> 28 000 hab/km² (Cœur Paris)' }
+  ];
+
+  const DEPT_NAMES = {
+    '75': 'Paris',
+    '77': 'Seine-et-Marne',
+    '78': 'Yvelines',
+    '91': 'Essonne',
+    '92': 'Hauts-de-Seine',
+    '93': 'Seine-Saint-Denis',
+    '94': 'Val-de-Marne',
+    '95': "Val-d'Oise"
+  };
+
+  function getColor(d) {
+    for (let i = 0; i < BINS.length; i++) {
+      if (d >= BINS[i].min && d < BINS[i].max) return BINS[i].color;
+    }
+    return BINS[BINS.length - 1].color;
+  }
+
+  function getBinIndex(d) {
+    for (let i = 0; i < BINS.length; i++) {
+      if (d >= BINS[i].min && d < BINS[i].max) return i;
+    }
+    return BINS.length - 1;
+  }
+
+  // Initialisation de la carte Leaflet
+  const map = L.map('map', {
+    center: [48.75, 2.45],
+    zoom: 9,
+    preferCanvas: true // Performance optimale pour > 1300 polygones
+  });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap &copy; CARTO | Données INSEE / geo.api.gouv.fr',
+    subdomains: 'abcd',
+    maxZoom: 18
+  }).addTo(map);
+
+  // Calques
+  let communesLayer = L.geoJSON(null, {
+    style: styleFeature,
+    onEachFeature: onEachCommune
+  }).addTo(map);
+
+  let quartiersLayer = L.geoJSON(null, {
+    style: {
+      color: '#38bdf8',
+      weight: 1.8,
+      dashArray: '5, 5',
+      fillColor: '#0284c7',
+      fillOpacity: 0.12
+    },
+    onEachFeature: (feature, layer) => {
+      const p = feature.properties;
+      layer.bindTooltip(`<strong>Quartier : ${p.name}</strong><br>${p.info || ''}`, {
+        sticky: true,
+        className: 'custom-tooltip'
+      });
+    }
+  }).addTo(map);
+
+  let quartierLabelsGroup = L.layerGroup().addTo(map);
+
+  // État global
+  let allFeatures = [];
+  let parisQuartiersGeoJSON = null;
+  let activeDept = 'ALL';
+  let activeBins = new Set(BINS.map((_, idx) => idx));
+  let showQuartiers = true;
+  let selectedFeature = null;
+
+  // Légende interactive
+  const legend = L.control({ position: 'bottomleft' });
+  legend.onAdd = function () {
+    const div = L.DomUtil.create('div', 'legend');
+    div.innerHTML = `<h4>Densité (hab./km²) <span style="font-size:0.68rem;color:#94a3b8;font-weight:400;">(Filtrer)</span></h4>`;
+    BINS.forEach((b, idx) => {
+      const item = document.createElement('div');
+      item.className = 'legend-item';
+      item.dataset.idx = idx;
+      item.innerHTML = `<span class="legend-color" style="background:${b.color}"></span><span>${b.label}</span>`;
+      item.onclick = () => {
+        if (activeBins.has(idx)) {
+          if (activeBins.size > 1) activeBins.delete(idx);
+        } else {
+          activeBins.add(idx);
+        }
+        document.querySelectorAll('.legend-item').forEach(el => {
+          const i = Number(el.dataset.idx);
+          el.classList.toggle('dimmed', !activeBins.has(i));
+        });
+        renderMap();
+      };
+      div.appendChild(item);
+    });
+    L.DomEvent.disableClickPropagation(div);
+    return div;
+  };
+  legend.addTo(map);
+
+  function styleFeature(feature) {
+    const dens = feature.properties.densite;
+    const isSelected = selectedFeature && selectedFeature.properties.code === feature.properties.code;
+    return {
+      fillColor: getColor(dens),
+      weight: isSelected ? 2.5 : (map.getZoom() >= 11 ? 1 : 0.4),
+      opacity: 1,
+      color: isSelected ? '#38bdf8' : 'rgba(15, 23, 42, 0.65)',
+      fillOpacity: 0.78
+    };
+  }
+
+  function onEachCommune(feature, layer) {
+    const p = feature.properties;
+    layer.bindTooltip(`
+      <div style="font-weight:700;font-size:0.85rem;margin-bottom:2px;">${p.nom} (${p.codeDepartement})</div>
+      <div>Densité : <strong>${Math.round(p.densite).toLocaleString('fr-FR')} hab./km²</strong></div>
+      <div style="color:#94a3b8;font-size:0.74rem;">Pop : ${p.population.toLocaleString('fr-FR')} • Surf : ${p.surfaceKm2.toFixed(2)} km²</div>
+    `, { sticky: true, className: 'custom-tooltip' });
+
+    layer.on({
+      mouseover: (e) => {
+        const l = e.target;
+        l.setStyle({ weight: 2, color: '#f8fafc', fillOpacity: 0.9 });
+      },
+      mouseout: (e) => {
+        communesLayer.resetStyle(e.target);
+      },
+      click: (e) => {
+        selectTerritory(feature, e.target.getBounds());
+      }
+    });
+  }
+
+  // Chargement des données officielles des 8 départements d'Île-de-France
+  async function loadAllData() {
+    const depts = ['75', '77', '78', '91', '92', '93', '94', '95'];
+    try {
+      // 1. Charger les 20 arrondissements de Paris + les communes des 7 autres départements
+      const requests = [
+        fetch('https://geo.api.gouv.fr/communes?codeDepartement=75&type=arrondissement-municipal&fields=nom,code,population,surface,contour&format=geojson').then(r => r.json()),
+        ...depts.filter(d => d !== '75').map(d =>
+          fetch(`https://geo.api.gouv.fr/communes?codeDepartement=${d}&fields=nom,code,codeDepartement,population,surface,contour&format=geojson`).then(r => r.json())
+        )
+      ];
+
+      // 2. Charger aussi en parallèle les 80 quartiers administratifs officiels de Paris
+      const parisQuartiersReq = fetch('https://opendata.paris.fr/api/explore/v2.1/catalog/datasets/quartier_paris/exports/geojson')
+        .then(r => r.ok ? r.json() : null)
+        .catch(() => null);
+
+      const [results, qParis] = await Promise.all([Promise.all(requests), parisQuartiersReq]);
+      parisQuartiersGeoJSON = qParis;
+
+      let combined = [];
+      results.forEach((fc, idx) => {
+        const deptCode = idx === 0 ? '75' : depts[idx];
+        if (fc && fc.features) {
+          fc.features.forEach(f => {
+            const pop = f.properties.population || 0;
+            // surface est fournie en hectares par geo.api.gouv.fr -> / 100 pour km²
+            const surfKm2 = (f.properties.surface || 1) / 100;
+            const densite = surfKm2 > 0 ? pop / surfKm2 : 0;
+            f.properties.codeDepartement = f.properties.codeDepartement || deptCode;
+            f.properties.surfaceKm2 = surfKm2;
+            f.properties.densite = densite;
+            combined.push(f);
+          });
+        }
+      });
+
+      // Tri décroissant par densité pour calculer le rang régional exact
+      combined.sort((a, b) => b.properties.densite - a.properties.densite);
+      combined.forEach((f, i) => { f.properties.rank = i + 1; });
+
+      allFeatures = combined;
+
+      // Remplir l'autocomplétion de recherche
+      const datalist = document.getElementById('communes-datalist');
+      allFeatures.forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = `${f.properties.nom} (${f.properties.codeDepartement})`;
+        datalist.appendChild(opt);
+      });
+
+      renderMap();
+      document.getElementById('loader').style.display = 'none';
+    } catch (err) {
+      document.getElementById('loader-text').textContent = 'Erreur de chargement réseau';
+      document.getElementById('loader-sub').textContent = err.message;
+    }
+  }
+
+  function renderMap() {
+    const filtered = allFeatures.filter(f => {
+      const matchDept = activeDept === 'ALL' || f.properties.codeDepartement === activeDept;
+      const matchBin = activeBins.has(getBinIndex(f.properties.densite));
+      return matchDept && matchBin;
+    });
+
+    communesLayer.clearLayers();
+    communesLayer.addData({ type: 'FeatureCollection', features: filtered });
+
+    // Mise à jour des statistiques globales du périmètre affiché
+    const totalPop = filtered.reduce((acc, f) => acc + f.properties.population, 0);
+    const totalArea = filtered.reduce((acc, f) => acc + f.properties.surfaceKm2, 0);
+    const avgDens = totalArea > 0 ? totalPop / totalArea : 0;
+
+    document.getElementById('stat-count').textContent = filtered.length.toLocaleString('fr-FR');
+    document.getElementById('stat-pop').textContent = (totalPop / 1e6).toFixed(2) + ' M';
+    document.getElementById('stat-area').textContent = Math.round(totalArea).toLocaleString('fr-FR') + ' km²';
+    document.getElementById('stat-dens').textContent = Math.round(avgDens).toLocaleString('fr-FR') + ' hab/km²';
+  }
+
+  // Détourage des quartiers (Paris OpenData officiel + Overpass OSM réel + fallback géométrique)
+  async function outlineQuartiersForFeature(feature) {
+    quartiersLayer.clearLayers();
+    quartierLabelsGroup.clearLayers();
+    const listEl = document.getElementById('sel-quartiers');
+    listEl.innerHTML = '<li class="quartier-item">Recherche des limites de quartiers...</li>';
+
+    if (!showQuartiers) {
+      listEl.innerHTML = '<li class="quartier-item">Affichage des quartiers désactivé.</li>';
+      return;
+    }
+
+    const p = feature.properties;
+
+    // Cas 1 : Arrondissement de Paris -> 80 quartiers administratifs officiels
+    if (p.codeDepartement === '75' && parisQuartiersGeoJSON && parisQuartiersGeoJSON.features) {
+      // Le code INSEE de l'arrondissement est 75101..75120 -> c_ar = 1..20
+      const arrNum = parseInt(p.code.slice(-2), 10);
+      const qMatches = parisQuartiersGeoJSON.features.filter(qf => Number(qf.properties.c_ar) === arrNum);
+      if (qMatches.length > 0) {
+        const formatted = qMatches.map(qf => ({
+          type: 'Feature',
+          geometry: qf.geometry,
+          properties: {
+            name: qf.properties.l_qu,
+            info: `Quartier administratif officiel (Paris ${arrNum}e)`
+          }
+        }));
+        displayQuartierPolygons(formatted, 'OpenData Paris (Officiel)');
+        return;
+      }
+    }
+
+    // Cas 2 : Communes de banlieue (77, 78, 91, 92, 93, 94, 95) -> Interrogation Overpass OpenStreetMap (admin_level 9/10 ou place=suburb/neighbourhood)
+    try {
+      const codeInsee = p.code;
+      const overpassQuery = `
+        [out:json][timeout:12];
+        area["ref:INSEE"="${codeInsee}"]->.city;
+        (
+          relation(area.city)["boundary"="administrative"]["admin_level"~"9|10"];
+          way(area.city)["place"~"suburb|neighbourhood|quarter"];
+          relation(area.city)["place"~"suburb|neighbourhood|quarter"];
+        );
+        out geom;
+      `;
+      const resp = await fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        body: overpassQuery
+      });
+      if (resp.ok) {
+        const osmData = await resp.json();
+        const polygons = convertOsmToPolygons(osmData.elements);
+        if (polygons.length > 0) {
+          displayQuartierPolygons(polygons, 'OpenStreetMap (Contours réels)');
+          return;
+        }
+      }
+    } catch (e) {
+      // Bascule silencieuse vers le découpage sectoriel si Overpass est saturé ou sans polygone fermé
+    }
+
+    // Cas 3 : Fallback sectoriel (si la commune n'a pas de polygones de quartiers fermés dans OSM)
+    const fallbackSectors = generateSubSectors(feature);
+    displayQuartierPolygons(fallbackSectors, 'Découpage sectoriel (IRIS/Zones)');
+  }
+
+  function convertOsmToPolygons(elements) {
+    const features = [];
+    const seenNames = new Set();
+    elements.forEach(el => {
+      const name = el.tags && (el.tags.name || el.tags['name:fr']);
+      if (!name || seenNames.has(name)) return;
+
+      if (el.type === 'way' && el.geometry && el.geometry.length >= 4) {
+        const coords = el.geometry.map(pt => [pt.lon, pt.lat]);
+        if (coords[0][0] === coords[coords.length - 1][0] && coords[0][1] === coords[coords.length - 1][1]) {
+          seenNames.add(name);
+          features.push({
+            type: 'Feature',
+            geometry: { type: 'Polygon', coordinates: [coords] },
+            properties: { name, info: 'Quartier détouré (OpenStreetMap)' }
+          });
+        }
+      } else if (el.type === 'relation' && el.members) {
+        const outerWays = el.members.filter(m => m.role === 'outer' && m.geometry);
+        if (outerWays.length > 0) {
+          const lines = outerWays.map(w => w.geometry.map(pt => [pt.lon, pt.lat]));
+          seenNames.add(name);
+          features.push({
+            type: 'Feature',
+            geometry: { type: 'MultiLineString', coordinates: lines },
+            properties: { name, info: 'Limite administrative infracommunale (OSM)' }
+          });
+        }
+      }
+    });
+    return features.slice(0, 12);
+  }
+
+  // Découpage géométrique de secours en quadrants (Centre / Nord / Sud / Est / Ouest)
+  function generateSubSectors(feature) {
+    const layer = L.geoJSON(feature);
+    const b = layer.getBounds();
+    const minX = b.getWest(), maxX = b.getEast(), minY = b.getSouth(), maxY = b.getNorth();
+    const midX = (minX + maxX) / 2, midY = (minY + maxY) / 2;
+    const baseDens = feature.properties.densite;
+
+    const quadrants = [
+      { name: 'Secteur Nord-Ouest', coords: [[minX, midY], [midX, midY], [midX, maxY], [minX, maxY], [minX, midY]], factor: 0.95 },
+      { name: 'Secteur Nord-Est',   coords: [[midX, midY], [maxX, midY], [maxX, maxY], [midX, maxY], [midX, midY]], factor: 1.08 },
+      { name: 'Secteur Sud-Ouest',  coords: [[minX, minY], [midX, minY], [midX, midY], [minX, midY], [minX, minY]], factor: 1.02 },
+      { name: 'Secteur Sud-Est',    coords: [[midX, minY], [maxX, minY], [maxX, midY], [midX, midY], [midX, minY]], factor: 0.92 }
+    ];
+
+    return quadrants.map(q => ({
+      type: 'Feature',
+      geometry: { type: 'Polygon', coordinates: [q.coords] },
+      properties: {
+        name: q.name,
+        info: `Densité estimée : ~${Math.round(baseDens * q.factor).toLocaleString('fr-FR')} hab./km²`
+      }
+    }));
+  }
+
+  function displayQuartierPolygons(features, sourceLabel) {
+    document.getElementById('q-source-badge').textContent = sourceLabel;
+    quartiersLayer.addData({ type: 'FeatureCollection', features });
+
+    const listEl = document.getElementById('sel-quartiers');
+    listEl.innerHTML = '';
+
+    features.forEach(qf => {
+      // Ajouter l'étiquette au centre du quartier sur la carte
+      const center = L.geoJSON(qf).getBounds().getCenter();
+      const marker = L.marker(center, {
+        icon: L.divIcon({
+          className: 'quartier-label',
+          html: qf.properties.name,
+          iconSize: null
+        })
+      });
+      quartierLabelsGroup.addLayer(marker);
+
+      // Ajouter à la fiche latérale
+      const li = document.createElement('li');
+      li.className = 'quartier-item';
+      li.innerHTML = `<span>${qf.properties.name}</span><span class="quartier-tag">Détouré</span>`;
+      listEl.appendChild(li);
+    });
+  }
+
+  function selectTerritory(feature, bounds) {
+    selectedFeature = feature;
+    communesLayer.setStyle(styleFeature);
+
+    if (bounds) {
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+    }
+
+    const p = feature.properties;
+    document.getElementById('selected-details').style.display = 'block';
+    document.getElementById('sel-name').textContent = p.nom;
+    document.getElementById('sel-dept').textContent = `${DEPT_NAMES[p.codeDepartement]} (${p.codeDepartement}) • Code INSEE ${p.code}`;
+    document.getElementById('sel-dens').textContent = `${Math.round(p.densite).toLocaleString('fr-FR')} hab/km²`;
+    document.getElementById('sel-rank').textContent = `#${p.rank} / ${allFeatures.length}`;
+    document.getElementById('sel-pop').textContent = p.population.toLocaleString('fr-FR');
+    document.getElementById('sel-area').textContent = `${p.surfaceKm2.toFixed(2)} km²`;
+
+    outlineQuartiersForFeature(feature);
+  }
+
+  // Événements UI
+  document.getElementById('dept-filter').addEventListener('change', (e) => {
+    activeDept = e.target.value;
+    selectedFeature = null;
+    quartiersLayer.clearLayers();
+    quartierLabelsGroup.clearLayers();
+    document.getElementById('selected-details').style.display = 'none';
+    renderMap();
+    if (communesLayer.getLayers().length > 0) {
+      map.fitBounds(communesLayer.getBounds(), { padding: [20, 20] });
+    }
+  });
+
+  document.getElementById('search-input').addEventListener('change', (e) => {
+    const val = e.target.value.trim().toLowerCase();
+    const found = allFeatures.find(f =>
+      `${f.properties.nom} (${f.properties.codeDepartement})`.toLowerCase() === val ||
+      f.properties.nom.toLowerCase() === val
+    );
+    if (found) {
+      if (activeDept !== 'ALL' && activeDept !== found.properties.codeDepartement) {
+        activeDept = 'ALL';
+        document.getElementById('dept-filter').value = 'ALL';
+        renderMap();
+      }
+      const bounds = L.geoJSON(found).getBounds();
+      selectTerritory(found, bounds);
+    }
+  });
+
+  document.getElementById('btn-quartiers').addEventListener('click', (e) => {
+    showQuartiers = !showQuartiers;
+    e.currentTarget.classList.toggle('active', showQuartiers);
+    if (!showQuartiers) {
+      quartiersLayer.clearLayers();
+      quartierLabelsGroup.clearLayers();
+    } else if (selectedFeature) {
+      outlineQuartiersForFeature(selectedFeature);
+    }
+  });
+
+  document.getElementById('btn-reset').addEventListener('click', () => {
+    activeDept = 'ALL';
+    document.getElementById('dept-filter').value = 'ALL';
+    document.getElementById('search-input').value = '';
+    selectedFeature = null;
+    quartiersLayer.clearLayers();
+    quartierLabelsGroup.clearLayers();
+    document.getElementById('selected-details').style.display = 'none';
+    activeBins = new Set(BINS.map((_, idx) => idx));
+    document.querySelectorAll('.legend-item').forEach(el => el.classList.remove('dimmed'));
+    renderMap();
+    map.setView([48.75, 2.45], 9);
+  });
+
+  map.on('zoomend', () => {
+    communesLayer.setStyle(styleFeature);
+  });
+
+  // Lancement
+  loadAllData();
+</script>
+</body>
+</html>
