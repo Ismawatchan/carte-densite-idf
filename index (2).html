@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Densité de Population - Île-de-France (75, 77, 78, 91, 92, 93, 94, 95)</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <!-- FontAwesome pour les icônes -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        #map {
+            width: 100%;
+            height: 100vh;
+            z-index: 1;
+            background-color: #f8fafc;
+        }
+
+        .custom-tooltip {
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            border-radius: 12px;
+            color: #fff;
+            padding: 10px 14px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.35);
+            font-family: 'Inter', sans-serif;
+            pointer-events: none;
+        }
+        .leaflet-tooltip-left.custom-tooltip::before {
+            border-left-color: rgba(15, 23, 42, 0.95);
+        }
+        .leaflet-tooltip-right.custom-tooltip::before {
+            border-right-color: rgba(15, 23, 42, 0.95);
+        }
+        .leaflet-tooltip-top.custom-tooltip::before {
+            border-top-color: rgba(15, 23, 42, 0.95);
+        }
+        .leaflet-tooltip-bottom.custom-tooltip::before {
+            border-bottom-color: rgba(15, 23, 42, 0.95);
+        }
+
+        .district-label {
+            background: rgba(255, 255, 255, 0.94);
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 2px 7px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #0f172a;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.14);
+            white-space: nowrap;
+            text-align: center;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        .leaflet-top.leaflet-left {
+            top: auto;
+            bottom: 24px;
+            left: 20px;
+        }
+        @media (max-width: 640px) {
+            .leaflet-top.leaflet-left {
+                bottom: auto;
+                top: 165px;
+                left: 12px;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased selection:bg-amber-500 selection:text-white">
+
+    <!-- Écran de chargement initial -->
+    <div id="loader-overlay" class="fixed inset-0 z-[2000] bg-slate-900/80 backdrop-blur-md flex flex-col items-center justify-center text-white transition-opacity duration-500">
+        <div class="bg-slate-800/95 border border-slate-700 p-8 rounded-2xl shadow-2xl max-w-md w-[90%] text-center">
+            <div class="relative w-16 h-16 mx-auto mb-5">
+                <div class="absolute inset-0 rounded-full border-4 border-amber-500/20"></div>
+                <div class="absolute inset-0 rounded-full border-4 border-amber-500 border-t-transparent animate-spin"></div>
+                <i class="fa-solid fa-map-location-dot text-amber-400 text-xl absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"></i>
+            </div>
+            <h2 class="text-xl font-bold tracking-tight mb-2">Île-de-France Complète</h2>
+            <p id="loader-status" class="text-sm text-slate-300 mb-4">Connexion à l'API officielle geo.api.gouv.fr...</p>
+            <div class="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
+                <div id="loader-progress" class="bg-gradient-to-r from-amber-400 to-rose-500 h-2 rounded-full transition-all duration-300" style="width: 15%"></div>
+            </div>
+            <p class="text-xs text-slate-400 mt-3">Chargement des 8 départements (75, 77, 78, 91, 92, 93, 94, 95) & quartiers</p>
+        </div>
+    </div>
+
+    <!-- Barre supérieure flottante -->
+    <header class="fixed top-4 left-4 right-4 z-[1000] pointer-events-none flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3">
+
+        <!-- Bloc Titre & Sélecteur de Département -->
+        <div class="pointer-events-auto bg-white/95 backdrop-blur-md border border-slate-200/80 shadow-lg rounded-2xl p-3 flex flex-col md:flex-row items-start md:items-center gap-3">
+            <div class="flex items-center gap-2.5 pr-2">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-red-600 flex items-center justify-center text-white shadow-md shrink-0">
+                    <i class="fa-solid fa-city text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-sm sm:text-base font-bold text-slate-900 leading-tight">Densité Île-de-France</h1>
+                    <p id="header-subtitle" class="text-[11px] text-slate-500 font-medium">8 départements • INSEE / GeoAPI</p>
+                </div>
+            </div>
+
+            <div class="h-6 w-[1px] bg-slate-200 hidden md:block"></div>
+
+            <!-- Filtres 8 Départements -->
+            <div class="flex flex-wrap items-center gap-1.5 w-full md:w-auto" id="dept-filters">
+                <button data-dept="ALL" class="dept-btn px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all bg-slate-900 text-white shadow-sm">
+                    Tout IDF
+                </button>
+                <button data-dept="PETITE" class="dept-btn px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/70">
+                    Petite Couronne
+                </button>
+                <button data-dept="GRANDE" class="dept-btn px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all bg-slate-100 hover:bg-slate-200 text-slate-700">
+                    Grande Couronne
+                </button>
+                <button data-dept="75" class="dept-btn px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all bg-slate-100 hover:bg-slate-200 text-slate-700">
+                    75 Paris
+                </button>
+                <button data-dept="92" class="dept-btn px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all bg-slate-100 hover:bg-slate-200 text-slate-700">
+                    92
+                </button>
+                <button data-dept="93" class="dept-btn px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all bg-slate-100 hover:bg-slate-200 text-slate-700">
+                    93
+                </button>
+                <button data-dept="94" class="dept-btn px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all bg-slate-100 hover:bg-slate-200 text-slate-700">
+                    94
+                </button>
+                <button data-dept="77" class="dept-btn px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all bg-slate-100 hover:bg-slate-200 text-slate-700">
+                    77
+                </button>
+                <button data-dept="78" class="dept-btn px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all bg-slate-100 hover:bg-slate-200 text-slate-700">
+                    78
+                </button>
+                <button data-dept="91" class="dept-btn px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all bg-slate-100 hover:bg-slate-200 text-slate-700">
+                    91
+                </button>
+                <button data-dept="95" class="dept-btn px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all bg-slate-100 hover:bg-slate-200 text-slate-700">
+                    95
+                </button>
+            </div>
+        </div>
+
+        <!-- Bloc Recherche & Option Quartiers -->
+        <div class="pointer-events-auto flex items-center gap-2 self-end xl:self-auto w-full sm:w-auto">
+            <button id="toggle-districts-btn" title="Afficher les contours et repères des quartiers" class="bg-white/95 backdrop-blur-md border border-slate-200/80 hover:bg-slate-50 text-slate-700 px-3.5 py-2.5 rounded-2xl shadow-lg text-xs font-semibold flex items-center gap-2 transition-all shrink-0">
+                <i class="fa-solid fa-layer-group text-amber-600"></i>
+                <span class="hidden sm:inline">Quartiers</span>
+                <span id="districts-badge" class="px-1.5 py-0.5 text-[10px] rounded-md bg-slate-100 text-slate-500">Auto</span>
+            </button>
+
+            <div class="relative flex-1 sm:w-64">
+                <div class="relative">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                    <input type="text" id="search-input" placeholder="Commune, arrdt, quartier..." autocomplete="off"
+                        class="w-full bg-white/95 backdrop-blur-md border border-slate-200/80 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 rounded-2xl pl-9 pr-8 py-2.5 text-xs font-medium text-slate-800 shadow-lg outline-none transition-all">
+                    <button id="clear-search" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1">
+                        <i class="fa-solid fa-xmark text-xs"></i>
+                    </button>
+                </div>
+                <div id="search-results" class="hidden absolute top-full mt-2 left-0 right-0 bg-white rounded-2xl shadow-2xl border border-slate-200 max-h-72 overflow-y-auto z-[1100] divide-y divide-slate-100">
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Carte Leaflet -->
+    <main id="map"></main>
+
+    <!-- Panneau Latéral d'Informations Détaillées -->
+    <aside id="info-panel" class="fixed top-28 xl:top-24 right-4 bottom-24 sm:bottom-auto sm:max-h-[calc(100vh-11rem)] w-[calc(100%-2rem)] sm:w-96 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl shadow-2xl z-[1050] transform translate-x-[120%] transition-transform duration-300 ease-out flex flex-col overflow-hidden">
+        <div class="p-4 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex items-start justify-between shrink-0">
+            <div>
+                <div class="flex items-center gap-2 mb-1">
+                    <span id="panel-dept-badge" class="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-md bg-amber-500 text-slate-950">92 • Hauts-de-Seine</span>
+                    <span id="panel-rank-badge" class="px-2 py-0.5 text-[10px] font-semibold rounded-md bg-white/15 text-slate-200">#1 / 1287</span>
+                </div>
+                <h2 id="panel-city-name" class="text-lg font-bold leading-snug">Levallois-Perret</h2>
+                <p id="panel-insee-code" class="text-xs text-slate-400">Code INSEE : 92044</p>
+            </div>
+            <button id="close-panel-btn" class="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="p-4 overflow-y-auto space-y-4 flex-1">
+            <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Densité de population</span>
+                    <span id="panel-density-tag" class="px-2 py-0.5 rounded-full text-[11px] font-bold text-white bg-red-600">Très dense</span>
+                </div>
+                <div class="flex items-baseline gap-1.5">
+                    <span id="panel-density-val" class="text-2xl font-extrabold text-slate-900">27 650</span>
+                    <span class="text-xs font-semibold text-slate-500">hab. / km²</span>
+                </div>
+                <div class="mt-2.5">
+                    <div class="flex justify-between text-[11px] text-slate-500 mb-1">
+                        <span id="panel-avg-label">Comparaison IDF (moy. ~1 030)</span>
+                        <span id="panel-density-ratio" class="font-semibold text-slate-700">26.8x la moyenne</span>
+                    </div>
+                    <div class="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                        <div id="panel-density-bar" class="h-full rounded-full transition-all duration-500" style="width: 85%; background-color: #bd0026;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/70">
+                    <div class="flex items-center gap-1.5 text-slate-500 text-xs mb-1">
+                        <i class="fa-solid fa-users text-amber-600"></i>
+                        <span>Population</span>
+                    </div>
+                    <p id="panel-pop-val" class="text-base font-bold text-slate-900">68 009 hab.</p>
+                </div>
+                <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/70">
+                    <div class="flex items-center gap-1.5 text-slate-500 text-xs mb-1">
+                        <i class="fa-solid fa-vector-square text-amber-600"></i>
+                        <span>Superficie</span>
+                    </div>
+                    <p id="panel-area-val" class="text-base font-bold text-slate-900">2,41 km²</p>
+                </div>
+            </div>
+
+            <div>
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                        <i class="fa-solid fa-map-pin text-rose-500"></i>
+                        Quartiers &amp; Secteurs urbains
+                    </h3>
+                    <button id="zoom-to-city-btn" class="text-[11px] font-semibold text-amber-600 hover:text-amber-700 flex items-center gap-1">
+                        <i class="fa-solid fa-crosshairs"></i> Centrer
+                    </button>
+                </div>
+                <p id="panel-urban-profile" class="text-xs text-slate-600 mb-3 leading-relaxed bg-amber-50/70 border border-amber-200/60 p-2.5 rounded-xl">
+                    Profil urbain de la commune.
+                </p>
+                <div id="panel-districts-list" class="space-y-2"></div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Légende Interactive Choroplèthe -->
+    <div id="legend-box" class="fixed bottom-5 right-4 z-[1000] bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl shadow-xl p-3.5 w-64 sm:w-72 transition-all">
+        <div class="flex items-center justify-between mb-2">
+            <div>
+                <h3 class="text-xs font-bold text-slate-900">Densité (hab. / km²)</h3>
+                <p class="text-[10px] text-slate-500">Cliquez sur une tranche pour filtrer</p>
+            </div>
+            <button id="reset-legend-filter" class="hidden text-[10px] font-semibold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 hover:bg-amber-200 transition-colors">
+                Réinitialiser
+            </button>
+        </div>
+
+        <div id="legend-items" class="space-y-1"></div>
+
+        <div class="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
+            <span id="visible-count-label">Chargement...</span>
+            <span id="zoom-level-label">Zoom: 9</span>
+        </div>
+    </div>
+
+    <!-- Notification toast -->
+    <div id="toast-msg" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-[1500] bg-slate-900 text-white text-xs font-medium px-4 py-2.5 rounded-full shadow-xl opacity-0 pointer-events-none transition-opacity duration-300 flex items-center gap-2">
+        <i class="fa-solid fa-circle-info text-amber-400"></i>
+        <span id="toast-text">Message</span>
+    </div>
+
+    <script>
+        /**
+         * ÉCHELLE DE DENSITÉ ADAPTÉE À TOUTE L'ÎLE-DE-FRANCE
+         * Couvre les communes rurales (< 500 hab/km²) jusqu'aux arrondissements parisiens (> 30 000 hab/km²)
+         */
+        const DENSITY_CLASSES = [
+            { id: 0, min: 0,     max: 500,      color: '#fef0d9', label: '< 500',            desc: 'Rural / Forêts & espaces agricoles' },
+            { id: 1, min: 500,   max: 2500,     color: '#fdd49e', label: '500 – 2 500',      desc: 'Périurbain / Bourgs & pavillonnaire' },
+            { id: 2, min: 2500,  max: 7000,     color: '#fdbb84', label: '2 500 – 7 000',    desc: 'Urbain modéré / Pôles de Grande Couronne' },
+            { id: 3, min: 7000,  max: 14000,    color: '#fc8d59', label: '7 000 – 14 000',   desc: 'Densité urbaine soutenue' },
+            { id: 4, min: 14000, max: 22000,    color: '#ef6548', label: '14 000 – 22 000',  desc: 'Forte densité urbaine' },
+            { id: 5, min: 22000, max: 30000,    color: '#d7301f', label: '22 000 – 30 000',  desc: 'Hyper-densité résidentielle' },
+            { id: 6, min: 30000, max: Infinity, color: '#99000d', label: '> 30 000',         desc: 'Densité maximale (cœur de Paris)' }
+        ];
+
+        const DEPT_NAMES = {
+            '75': 'Paris',
+            '77': 'Seine-et-Marne',
+            '78': 'Yvelines',
+            '91': 'Essonne',
+            '92': 'Hauts-de-Seine',
+            '93': 'Seine-Saint-Denis',
+            '94': 'Val-de-Marne',
+            '95': "Val-d'Oise"
+        };
+
+        const PETITE_COURONNE = new Set(['75', '92', '93', '94']);
+        const GRANDE_COURONNE = new Set(['77', '78', '91', '95']);
+
+        const ENRICHED_DISTRICTS = {
+            '75101': { profile: 'Cœur historique monumental, Louvre, Palais-Royal et Les Halles.', districts: [
+                { name: 'Les Halles', densityTag: 'Très dense', ratio: 1.45, note: 'Pôle commercial et nœud RER majeur' },
+                { name: 'Palais-Royal', densityTag: 'Modéré', ratio: 0.85, note: 'Patrimoine historique et jardins' },
+                { name: 'Place Vendôme', densityTag: 'Faible', ratio: 0.65, note: 'Bureaux, haute joaillerie et hôtels' }
+            ]},
+            '75111': { profile: 'Arrondissement le plus dense de Paris et d’Europe. Tissu faubourien continu entre République, Bastille et Nation.', districts: [
+                { name: 'Folie-Méricourt / Belleville', densityTag: 'Record (>45k)', ratio: 1.15, note: 'Densité résidentielle maximale' },
+                { name: 'Saint-Ambroise / Oberkampf', densityTag: 'Hyper-dense', ratio: 1.05, note: 'Immeubles de rapport et cours artisanales' },
+                { name: 'Roquette / Bastille', densityTag: 'Hyper-dense', ratio: 0.98, note: 'Quartier vivant et très peuplé' }
+            ]},
+            '75118': { profile: 'Butte Montmartre, Goutte d’Or et Chapelle. Deuxième arrondissement le plus dense de la capitale.', districts: [
+                { name: 'Grandes-Carrières / Clignancourt', densityTag: 'Hyper-dense', ratio: 1.20, note: 'Versant nord de Montmartre très peuplé' },
+                { name: 'Goutte-d’Or / Château-Rouge', densityTag: 'Hyper-dense', ratio: 1.30, note: 'Forte densité humaine et commerciale' },
+                { name: 'La Chapelle', densityTag: 'Dense', ratio: 0.70, note: 'Emprises ferroviaires et renouveau urbain' }
+            ]},
+            '92044': { profile: 'Commune très dense des Hauts-de-Seine. Urbanisme en damier continu et immeubles haussmanniens.', districts: [
+                { name: 'Centre-Ville / Mairie', densityTag: 'Hyper-dense', ratio: 1.15, note: 'Plan hippodamien très serré' },
+                { name: 'Front de Seine / Eiffel', densityTag: 'Très dense', ratio: 0.95, note: 'Immeubles récents et bureaux' },
+                { name: 'Louise-Michel / Anatole-France', densityTag: 'Hyper-dense', ratio: 1.10, note: 'Continuité urbaine directe avec Paris 17e' }
+            ]},
+            '93048': { profile: 'Tissu faubourien dense au Bas-Montreuil et coteaux plus aérés.', districts: [
+                { name: 'Bas-Montreuil / Croix-de-Chavaux', densityTag: 'Hyper-dense', ratio: 1.35, note: 'Continuité avec Vincennes et Paris 20e' },
+                { name: 'Mairie / Solidarité', densityTag: 'Dense', ratio: 1.05, note: 'Centre administratif et commercial' },
+                { name: 'La Noue / Murs à Pêches', densityTag: 'Modéré', ratio: 0.75, note: 'Hauteurs et patrimoine horticole' }
+            ]},
+            '94028': { profile: 'Préfecture du Val-de-Marne structurée autour du lac, de l’architecture moderniste et des bords de Marne.', districts: [
+                { name: 'Mont-Mesly / Palais', densityTag: 'Très dense', ratio: 1.30, note: 'Grands ensembles et préfecture' },
+                { name: 'Lac / Pointe du Lac', densityTag: 'Dense', ratio: 0.95, note: 'Écoquartier et équipements sportifs' },
+                { name: 'Bords de Marne / Village', densityTag: 'Modéré', ratio: 0.70, note: 'Tissu ancien et pavillonnaire' }
+            ]}
+        };
+
+        const state = {
+            map: null,
+            geoLayer: null,
+            districtMarkersLayer: null,
+            features: [],
+            selectedDept: 'ALL',
+            selectedDensityId: null,
+            selectedFeatureCode: null,
+            showDistrictsMode: 'AUTO',
+            deptHaloLayer: null,
+            deptLayer: null
+        };
+
+        const formatNumber = (num) => Math.round(num).toLocaleString('fr-FR');
+        const formatArea = (km2) => km2.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        function getDensityClass(density) {
+            for (const cls of DENSITY_CLASSES) {
+                if (density >= cls.min && density < cls.max) return cls;
+            }
+            return DENSITY_CLASSES[DENSITY_CLASSES.length - 1];
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast-msg');
+            const text = document.getElementById('toast-text');
+            text.textContent = message;
+            toast.classList.remove('opacity-0');
+            clearTimeout(window._toastTimer);
+            window._toastTimer = setTimeout(() => {
+                toast.classList.add('opacity-0');
+            }, 3000);
+        }
+
+        function initMap() {
+            state.map = L.map('map', {
+                center: [48.74, 2.45],
+                zoom: 9,
+                minZoom: 8,
+                maxZoom: 17,
+                zoomControl: true,
+                preferCanvas: true
+            });
+
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> | Données INSEE / GeoAPI',
+                maxZoom: 19
+            }).addTo(state.map);
+
+            state.map.createPane('deptBorders');
+            state.map.getPane('deptBorders').style.zIndex = 450;
+            state.map.getPane('deptBorders').style.pointerEvents = 'none';
+
+            state.deptHaloLayer = L.geoJSON(null, {
+                pane: 'deptBorders',
+                interactive: false,
+                style: { color: '#ffffff', weight: 7, opacity: 0.9, fill: false }
+            }).addTo(state.map);
+
+            state.deptLayer = L.geoJSON(null, {
+                pane: 'deptBorders',
+                interactive: false,
+                style: { color: '#1e1b4b', weight: 3.5, opacity: 0.95, fill: false }
+            }).addTo(state.map);
+
+            state.districtMarkersLayer = L.layerGroup().addTo(state.map);
+
+            state.map.on('zoomend', () => {
+                const z = state.map.getZoom();
+                document.getElementById('zoom-level-label').textContent = `Zoom: ${z}`;
+                updateBordersForZoom(z);
+                renderDistrictMarkers();
+            });
+        }
+
+        async function fetchIleDeFranceData() {
+            const loaderStatus = document.getElementById('loader-status');
+            const loaderProgress = document.getElementById('loader-progress');
+            const depts = ['77', '78', '91', '92', '93', '94', '95'];
+            let allRawFeatures = [];
+
+            try {
+                loaderStatus.textContent = 'Téléchargement des communes des 8 départements...';
+                loaderProgress.style.width = '30%';
+
+                const deptPromises = depts.map(code =>
+                    fetch(`https://geo.api.gouv.fr/departements/${code}/communes?fields=nom,code,codeDepartement,population,surface,contour&format=geojson&geometry=contour`)
+                        .then(res => {
+                            if (!res.ok) throw new Error(`Erreur HTTP ${res.status}`);
+                            return res.json();
+                        })
+                );
+
+                loaderProgress.style.width = '60%';
+                loaderStatus.textContent = 'Téléchargement des 20 arrondissements de Paris (75)...';
+
+                const parisArrPromise = fetch('https://geo.api.gouv.fr/communes?codeDepartement=75&type=arrondissement-municipal&fields=nom,code,codeDepartement,population,surface,contour&format=geojson&geometry=contour')
+                    .then(res => res.ok ? res.json() : { features: [] });
+
+                const results = await Promise.all([...deptPromises, parisArrPromise]);
+
+                loaderProgress.style.width = '85%';
+                loaderStatus.textContent = 'Calcul des densités et découpage des quartiers...';
+
+                results.forEach(fc => {
+                    if (fc && Array.isArray(fc.features)) {
+                        allRawFeatures.push(...fc.features);
+                    }
+                });
+
+                const hasParisArr = allRawFeatures.some(f => f.properties && f.properties.codeDepartement === '75');
+                if (!hasParisArr) {
+                    const parisWhole = await fetch('https://geo.api.gouv.fr/departements/75/communes?fields=nom,code,codeDepartement,population,surface,contour&format=geojson&geometry=contour')
+                        .then(r => r.json());
+                    if (parisWhole && parisWhole.features) {
+                        allRawFeatures.push(...parisWhole.features);
+                    }
+                }
+
+                if (allRawFeatures.length === 0) throw new Error('Aucune donnée reçue');
+
+            } catch (err) {
+                console.warn('Fallback données locales :', err);
+                loaderStatus.textContent = 'Chargement du jeu de données de secours...';
+                allRawFeatures = generateFallbackGeoJSON();
+            }
+
+            const processed = allRawFeatures.map(feature => {
+                const p = feature.properties || {};
+                const pop = Number(p.population) || 0;
+                const areaKm2 = p.surface ? (Number(p.surface) / 100) : 1;
+                const density = areaKm2 > 0 ? (pop / areaKm2) : 0;
+                const deptCode = p.codeDepartement || String(p.code || '').substring(0, 2);
+                const displayName = String(p.nom || '').replace(' Arrondissement', '');
+                const enriched = getCityDistrictsInfo(p.code, displayName, density, deptCode);
+
+                return {
+                    ...feature,
+                    properties: {
+                        ...p,
+                        displayName,
+                        deptCode,
+                        population: pop,
+                        areaKm2,
+                        density,
+                        densityClass: getDensityClass(density),
+                        urbanProfile: enriched.profile,
+                        districts: enriched.districts
+                    }
+                };
+            });
+
+            processed.sort((a, b) => b.properties.density - a.properties.density);
+            processed.forEach((f, idx) => {
+                f.properties.rank = idx + 1;
+                f.properties.totalCount = processed.length;
+            });
+
+            state.features = processed;
+            document.getElementById('header-subtitle').textContent = `${processed.length} territoires (75–95) • INSEE / GeoAPI`;
+
+            try {
+                const allDeptCodes = ['75', '77', '78', '91', '92', '93', '94', '95'];
+                const deptResps = await Promise.all(
+                    allDeptCodes.map(c =>
+                        fetch(`https://geo.api.gouv.fr/departements/${c}?fields=nom,code,contour&format=geojson`)
+                            .then(r => r.ok ? r.json() : null)
+                            .catch(() => null)
+                    )
+                );
+                const deptFeatures = [];
+                deptResps.forEach(d => {
+                    if (!d) return;
+                    if (d.type === 'Feature' && d.geometry) deptFeatures.push(d);
+                    else if (d.contour) deptFeatures.push({ type: 'Feature', geometry: d.contour, properties: { code: d.code, nom: d.nom } });
+                });
+                if (state.deptHaloLayer && state.deptLayer && deptFeatures.length > 0) {
+                    state.deptHaloLayer.clearLayers();
+                    state.deptLayer.clearLayers();
+                    const fc = { type: 'FeatureCollection', features: deptFeatures };
+                    state.deptHaloLayer.addData(fc);
+                    state.deptLayer.addData(fc);
+                }
+            } catch (_) {}
+
+            loaderProgress.style.width = '100%';
+            setTimeout(() => {
+                const overlay = document.getElementById('loader-overlay');
+                overlay.classList.add('opacity-0');
+                setTimeout(() => overlay.remove(), 450);
+            }, 250);
+        }
+
+        function getCityDistrictsInfo(code, name, density, deptCode) {
+            if (ENRICHED_DISTRICTS[code]) return ENRICHED_DISTRICTS[code];
+
+            let profile = '';
+            if (density >= 20000) {
+                profile = `Tissu urbain très dense (${formatNumber(density)} hab/km²), bâti collectif continu et proximité immédiate avec Paris.`;
+            } else if (density >= 5000) {
+                profile = `Espace urbain structuré (${formatNumber(density)} hab/km²) mêlant centre-ville, pôles de transports et quartiers résidentiels.`;
+            } else if (density >= 800) {
+                profile = `Commune périurbaine ou pôle de Grande Couronne (${formatNumber(density)} hab/km²) associant bourg centre, lotissements et espaces verts.`;
+            } else {
+                profile = `Territoire peu dense de Grande Couronne (${formatNumber(density)} hab/km²), dominé par l'agriculture, les forêts ou les plateaux ruraux.`;
+            }
+
+            const districts = [
+                {
+                    name: `Centre / Bourg de ${name}`,
+                    densityTag: density > 10000 ? 'Dense' : (density > 1500 ? 'Modéré' : 'Faible'),
+                    ratio: 1.25,
+                    note: 'Cœur communal, mairie, commerces et équipements'
+                },
+                {
+                    name: `Axe Gare / Pôle d'activités`,
+                    densityTag: density > 12000 ? 'Très dense' : 'Modéré',
+                    ratio: 1.12,
+                    note: 'Secteur de mobilité et zones d’emploi ou services'
+                },
+                {
+                    name: `Périphérie / Espaces naturels`,
+                    densityTag: density > 10000 ? 'Dense' : 'Faible',
+                    ratio: 0.72,
+                    note: 'Quartiers extérieurs, boisements, plaines ou vallées'
+                }
+            ];
+
+            return { profile, districts };
+        }
+
+        function generateFallbackGeoJSON() {
+            const samples = [
+                { code: '75111', nom: 'Paris 11e', dept: '75', pop: 144292, surf: 367, lat: 48.859, lng: 2.378, r: 0.012 },
+                { code: '92044', nom: 'Levallois-Perret', dept: '92', pop: 68009, surf: 241, lat: 48.893, lng: 2.288, r: 0.011 },
+                { code: '93048', nom: 'Montreuil', dept: '93', pop: 111455, surf: 892, lat: 48.863, lng: 2.448, r: 0.019 },
+                { code: '94028', nom: 'Créteil', dept: '94', pop: 92989, surf: 1146, lat: 48.790, lng: 2.455, r: 0.021 },
+                { code: '78646', nom: 'Versailles', dept: '78', pop: 84095, surf: 2618, lat: 48.801, lng: 2.130, r: 0.045 },
+                { code: '77288', nom: 'Meaux', dept: '77', pop: 55714, surf: 1499, lat: 48.960, lng: 2.878, r: 0.040 },
+                { code: '91228', nom: 'Évry-Courcouronnes', dept: '91', pop: 66919, surf: 1270, lat: 48.624, lng: 2.443, r: 0.036 },
+                { code: '95127', nom: 'Cergy', dept: '95', pop: 68348, surf: 1165, lat: 49.036, lng: 2.078, r: 0.035 }
+            ];
+            return samples.map(s => {
+                const coords = [];
+                for (let i = 0; i <= 6; i++) {
+                    const angle = (i / 6) * Math.PI * 2;
+                    coords.push([s.lng + Math.cos(angle) * s.r * 1.4, s.lat + Math.sin(angle) * s.r]);
+                }
+                return {
+                    type: 'Feature',
+                    properties: { code: s.code, nom: s.nom, codeDepartement: s.dept, population: s.pop, surface: s.surf },
+                    geometry: { type: 'Polygon', coordinates: [coords] }
+                };
+            });
+        }
+
+        function matchesDeptFilter(deptCode) {
+            if (state.selectedDept === 'ALL') return true;
+            if (state.selectedDept === 'PETITE') return PETITE_COURONNE.has(deptCode);
+            if (state.selectedDept === 'GRANDE') return GRANDE_COURONNE.has(deptCode);
+            return deptCode === state.selectedDept;
+        }
+
+        function renderChoroplethLayer() {
+            if (state.geoLayer) {
+                state.map.removeLayer(state.geoLayer);
+            }
+
+            state.geoLayer = L.geoJSON(state.features, {
+                filter: (feature) => matchesDeptFilter(feature.properties.deptCode),
+                style: (feature) => getFeatureStyle(feature),
+                onEachFeature: (feature, layer) => {
+                    const p = feature.properties;
+
+                    layer.bindTooltip(() => `
+                        <div class="min-w-[175px]">
+                            <div class="flex items-center justify-between gap-3 mb-1">
+                                <span class="font-bold text-sm text-white">${p.displayName}</span>
+                                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/15 text-amber-300">${p.deptCode}</span>
+                            </div>
+                            <div class="flex items-center gap-2 text-xs">
+                                <span class="w-2.5 h-2.5 rounded-full inline-block shrink-0" style="background:${p.densityClass.color}"></span>
+                                <span class="font-bold text-amber-400">${formatNumber(p.density)}</span>
+                                <span class="text-slate-300 text-[11px]">hab/km²</span>
+                            </div>
+                            <div class="text-[10px] text-slate-400 mt-1">
+                                ${formatNumber(p.population)} hab. • ${formatArea(p.areaKm2)} km²
+                            </div>
+                        </div>
+                    `, {
+                        sticky: true,
+                        direction: 'top',
+                        offset: [0, -10],
+                        className: 'custom-tooltip'
+                    });
+
+                    layer.on({
+                        mouseover: (e) => {
+                            e.target.setStyle({ weight: 3, color: '#0f172a', fillOpacity: 0.95 });
+                            if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+                                e.target.bringToFront();
+                            }
+                        },
+                        mouseout: (e) => {
+                            state.geoLayer.resetStyle(e.target);
+                        },
+                        click: (e) => {
+                            L.DomEvent.stopPropagation(e);
+                            selectFeature(feature, layer);
+                        }
+                    });
+                }
+            }).addTo(state.map);
+
+            const activeCount = state.features.filter(f => {
+                const okDept = matchesDeptFilter(f.properties.deptCode);
+                const okClass = state.selectedDensityId === null || f.properties.densityClass.id === state.selectedDensityId;
+                return okDept && okClass;
+            }).length;
+
+            document.getElementById('visible-count-label').textContent = `${activeCount} zone${activeCount > 1 ? 's' : ''} active${activeCount > 1 ? 's' : ''}`;
+            renderDistrictMarkers();
+        }
+
+        function getFeatureStyle(feature) {
+            const p = feature.properties;
+            const isSelected = state.selectedFeatureCode === p.code;
+            const isDimmedByLegend = state.selectedDensityId !== null && p.densityClass.id !== state.selectedDensityId;
+            const zoom = state.map ? state.map.getZoom() : 9;
+
+            return {
+                fillColor: p.densityClass.color,
+                weight: isSelected ? 3.2 : (zoom >= 13 ? 1.6 : (zoom >= 11 ? 0.9 : 0.45)),
+                opacity: 1,
+                color: isSelected ? '#0f172a' : (zoom >= 13 ? '#475569' : '#ffffff'),
+                fillOpacity: isDimmedByLegend ? 0.14 : (isSelected ? 0.95 : 0.84)
+            };
+        }
+
+        function updateBordersForZoom() {
+            if (state.geoLayer) state.geoLayer.setStyle(getFeatureStyle);
+        }
+
+        function renderDistrictMarkers() {
+            state.districtMarkersLayer.clearLayers();
+            const zoom = state.map.getZoom();
+
+            const shouldShow = state.showDistrictsMode === 'ON' || (state.showDistrictsMode === 'AUTO' && zoom >= 13);
+            if (!shouldShow || !state.geoLayer) return;
+
+            const bounds = state.map.getBounds();
+
+            state.geoLayer.eachLayer(layer => {
+                const feature = layer.feature;
+                const p = feature.properties;
+                const center = layer.getBounds().getCenter();
+                if (!bounds.contains(center)) return;
+
+                if (state.selectedDensityId !== null && p.densityClass.id !== state.selectedDensityId) return;
+                if (zoom === 13 && state.selectedFeatureCode !== p.code && p.population < 70000) return;
+
+                const districts = p.districts || [];
+                const layerBounds = layer.getBounds();
+                const latSpan = (layerBounds.getNorth() - layerBounds.getSouth()) * 0.25;
+                const lngSpan = (layerBounds.getEast() - layerBounds.getWest()) * 0.25;
+
+                districts.forEach((d, idx) => {
+                    const angle = (idx / districts.length) * Math.PI * 2 + 0.5;
+                    const dLat = center.lat + Math.sin(angle) * latSpan;
+                    const dLng = center.lng + Math.cos(angle) * lngSpan;
+                    const shortName = d.name.split('/')[0].trim();
+
+                    const icon = L.divIcon({
+                        className: 'custom-div-icon',
+                        html: `<div class="district-label" title="${d.name} (${d.densityTag})"><span class="text-amber-600 mr-1">•</span>${shortName}</div>`,
+                        iconSize: [120, 22],
+                        iconAnchor: [60, 11]
+                    });
+
+                    const marker = L.marker([dLat, dLng], { icon, interactive: true });
+                    marker.on('click', () => selectFeature(feature, layer));
+                    state.districtMarkersLayer.addLayer(marker);
+                });
+            });
+        }
+
+        function selectFeature(feature, targetLayer = null) {
+            const p = feature.properties;
+            state.selectedFeatureCode = p.code;
+
+            if (state.geoLayer) {
+                state.geoLayer.setStyle(getFeatureStyle);
+                state.geoLayer.eachLayer(l => {
+                    if (l.feature.properties.code === p.code) {
+                        l.bringToFront();
+                        targetLayer = l;
+                    }
+                });
+            }
+
+            document.getElementById('panel-dept-badge').textContent = `${p.deptCode} • ${DEPT_NAMES[p.deptCode] || 'Île-de-France'}`;
+            document.getElementById('panel-rank-badge').textContent = `Rang #${p.rank} / ${p.totalCount}`;
+            document.getElementById('panel-city-name').textContent = p.displayName;
+            document.getElementById('panel-insee-code').textContent = `Code INSEE : ${p.code}`;
+
+            document.getElementById('panel-density-val').textContent = formatNumber(p.density);
+            const tagEl = document.getElementById('panel-density-tag');
+            tagEl.textContent = p.densityClass.label + ' hab/km²';
+            tagEl.style.backgroundColor = p.densityClass.color;
+            tagEl.style.color = p.densityClass.id <= 2 ? '#1e293b' : '#ffffff';
+
+            const refAvg = 1030;
+            const ratio = (p.density / refAvg).toFixed(1);
+            document.getElementById('panel-density-ratio').textContent = `${ratio}x la moyenne`;
+
+            const barPercent = Math.min(100, Math.max(5, (p.density / 38000) * 100));
+            const barEl = document.getElementById('panel-density-bar');
+            barEl.style.width = `${barPercent}%`;
+            barEl.style.backgroundColor = p.densityClass.color;
+
+            document.getElementById('panel-pop-val').textContent = `${formatNumber(p.population)} hab.`;
+            document.getElementById('panel-area-val').textContent = `${formatArea(p.areaKm2)} km²`;
+            document.getElementById('panel-urban-profile').textContent = p.urbanProfile;
+
+            const listContainer = document.getElementById('panel-districts-list');
+            listContainer.innerHTML = '';
+
+            p.districts.forEach(d => {
+                const estDistrictDensity = Math.round(p.density * d.ratio);
+                const dClass = getDensityClass(estDistrictDensity);
+
+                const card = document.createElement('div');
+                card.className = 'p-2.5 rounded-xl bg-white border border-slate-200/80 hover:border-amber-300 transition-colors shadow-sm';
+                card.innerHTML = `
+                    <div class="flex items-start justify-between gap-2 mb-1">
+                        <span class="text-xs font-bold text-slate-800">${d.name}</span>
+                        <span class="px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0" style="background:${dClass.color}; color:${dClass.id <= 2 ? '#1e293b' : '#fff'}">
+                            ${d.densityTag}
+                        </span>
+                    </div>
+                    <p class="text-[11px] text-slate-500 leading-snug mb-1.5">${d.note}</p>
+                    <div class="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-100">
+                        <span>Densité locale estimée :</span>
+                        <span class="font-semibold text-slate-700">~${formatNumber(estDistrictDensity)} hab/km²</span>
+                    </div>
+                `;
+                listContainer.appendChild(card);
+            });
+
+            document.getElementById('zoom-to-city-btn').onclick = () => {
+                if (targetLayer) {
+                    state.map.fitBounds(targetLayer.getBounds(), { padding: [60, 60], maxZoom: 14 });
+                }
+            };
+
+            document.getElementById('info-panel').classList.remove('translate-x-[120%]');
+            renderDistrictMarkers();
+        }
+
+        function buildInteractiveLegend() {
+            const container = document.getElementById('legend-items');
+            container.innerHTML = '';
+
+            DENSITY_CLASSES.forEach(cls => {
+                const count = state.features.filter(f => f.properties.densityClass.id === cls.id).length;
+
+                const row = document.createElement('button');
+                row.type = 'button';
+                row.dataset.classId = cls.id;
+                row.className = 'legend-row w-full flex items-center justify-between px-2 py-1 rounded-lg text-left transition-all hover:bg-slate-100 border border-transparent';
+                row.innerHTML = `
+                    <div class="flex items-center gap-2">
+                        <span class="w-4 h-4 rounded shadow-inner border border-black/10 shrink-0" style="background-color: ${cls.color}"></span>
+                        <span class="text-xs font-medium text-slate-700">${cls.label}</span>
+                    </div>
+                    <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">${count}</span>
+                `;
+
+                row.addEventListener('click', () => {
+                    state.selectedDensityId = (state.selectedDensityId === cls.id) ? null : cls.id;
+                    if (state.selectedDensityId !== null) showToast(`Filtre actif : ${cls.label} hab/km²`);
+                    updateLegendUI();
+                    renderChoroplethLayer();
+                });
+
+                container.appendChild(row);
+            });
+
+            document.getElementById('reset-legend-filter').addEventListener('click', () => {
+                state.selectedDensityId = null;
+                updateLegendUI();
+                renderChoroplethLayer();
+            });
+        }
+
+        function updateLegendUI() {
+            const resetBtn = document.getElementById('reset-legend-filter');
+            resetBtn.classList.toggle('hidden', state.selectedDensityId === null);
+
+            document.querySelectorAll('.legend-row').forEach(row => {
+                const id = Number(row.dataset.classId);
+                if (state.selectedDensityId === null) {
+                    row.classList.remove('opacity-40', 'bg-amber-50', 'border-amber-300');
+                } else if (id === state.selectedDensityId) {
+                    row.classList.remove('opacity-40');
+                    row.classList.add('bg-amber-50', 'border-amber-300');
+                } else {
+                    row.classList.add('opacity-40');
+                    row.classList.remove('bg-amber-50', 'border-amber-300');
+                }
+            });
+        }
+
+        function initUIControls() {
+            document.querySelectorAll('.dept-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.dept-btn').forEach(b => {
+                        b.classList.remove('bg-slate-900', 'text-white', 'shadow-sm');
+                        b.classList.add('bg-slate-100', 'text-slate-700');
+                    });
+                    btn.classList.remove('bg-slate-100', 'text-slate-700');
+                    btn.classList.add('bg-slate-900', 'text-white', 'shadow-sm');
+
+                    state.selectedDept = btn.dataset.dept;
+                    renderChoroplethLayer();
+
+                    if (state.geoLayer && state.geoLayer.getLayers().length > 0 && state.geoLayer.getBounds().isValid()) {
+                        state.map.fitBounds(state.geoLayer.getBounds(), { padding: [35, 35] });
+                    }
+                });
+            });
+
+            const toggleDistrictsBtn = document.getElementById('toggle-districts-btn');
+            const districtsBadge = document.getElementById('districts-badge');
+            toggleDistrictsBtn.addEventListener('click', () => {
+                if (state.showDistrictsMode === 'AUTO') {
+                    state.showDistrictsMode = 'ON';
+                    districtsBadge.textContent = 'Actif';
+                    districtsBadge.className = 'px-1.5 py-0.5 text-[10px] rounded-md bg-amber-500 text-white font-bold';
+                    if (state.map.getZoom() < 13) state.map.setZoom(13);
+                    showToast('Affichage des quartiers forcé');
+                } else if (state.showDistrictsMode === 'ON') {
+                    state.showDistrictsMode = 'OFF';
+                    districtsBadge.textContent = 'Masqué';
+                    districtsBadge.className = 'px-1.5 py-0.5 text-[10px] rounded-md bg-slate-200 text-slate-600';
+                    showToast('Étiquettes de quartiers masquées');
+                } else {
+                    state.showDistrictsMode = 'AUTO';
+                    districtsBadge.textContent = 'Auto';
+                    districtsBadge.className = 'px-1.5 py-0.5 text-[10px] rounded-md bg-slate-100 text-slate-500';
+                    showToast('Affichage automatique au zoom activé');
+                }
+                renderDistrictMarkers();
+            });
+
+            document.getElementById('close-panel-btn').addEventListener('click', () => {
+                document.getElementById('info-panel').classList.add('translate-x-[120%]');
+                state.selectedFeatureCode = null;
+                if (state.geoLayer) state.geoLayer.setStyle(getFeatureStyle);
+                renderDistrictMarkers();
+            });
+
+            const searchInput = document.getElementById('search-input');
+            const searchResults = document.getElementById('search-results');
+            const clearSearch = document.getElementById('clear-search');
+
+            searchInput.addEventListener('input', (e) => {
+                const query = e.target.value.trim().toLowerCase();
+                if (!query) {
+                    searchResults.classList.add('hidden');
+                    clearSearch.classList.add('hidden');
+                    return;
+                }
+                clearSearch.classList.remove('hidden');
+
+                const matches = [];
+                state.features.forEach(f => {
+                    const p = f.properties;
+                    const cityMatch = p.displayName.toLowerCase().includes(query) || String(p.code || '').startsWith(query);
+                    const matchingDistrict = (p.districts || []).find(d => d.name.toLowerCase().includes(query));
+                    if (cityMatch || matchingDistrict) {
+                        matches.push({
+                            feature: f,
+                            matchedDistrict: !cityMatch && matchingDistrict ? matchingDistrict.name : null
+                        });
+                    }
+                });
+
+                const topMatches = matches.slice(0, 12);
+                if (topMatches.length === 0) {
+                    searchResults.innerHTML = `<div class="p-3 text-xs text-slate-500 text-center">Aucun résultat pour "${e.target.value}"</div>`;
+                } else {
+                    searchResults.innerHTML = topMatches.map(m => {
+                        const p = m.feature.properties;
+                        return `
+                            <button type="button" data-code="${p.code}" class="search-item w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-center justify-between gap-2 transition-colors">
+                                <div>
+                                    <div class="text-xs font-bold text-slate-800">${p.displayName} <span class="text-slate-400 font-normal">(${p.deptCode})</span></div>
+                                    ${m.matchedDistrict ? `<div class="text-[10px] text-amber-600 font-medium"><i class="fa-solid fa-map-pin mr-1"></i>Quartier : ${m.matchedDistrict}</div>` : `<div class="text-[10px] text-slate-500">${formatNumber(p.population)} hab.</div>`}
+                                </div>
+                                <span class="text-[11px] font-bold px-2 py-0.5 rounded-md shrink-0" style="background:${p.densityClass.color}; color:${p.densityClass.id <= 2 ? '#1e293b' : '#fff'}">
+                                    ${formatNumber(p.density)}
+                                </span>
+                            </button>
+                        `;
+                    }).join('');
+                }
+
+                searchResults.classList.remove('hidden');
+
+                searchResults.querySelectorAll('.search-item').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const code = btn.dataset.code;
+                        const found = state.features.find(f => String(f.properties.code) === code);
+                        if (found) {
+                            if (!matchesDeptFilter(found.properties.deptCode)) {
+                                state.selectedDept = 'ALL';
+                                document.querySelectorAll('.dept-btn').forEach(b => {
+                                    const active = b.dataset.dept === 'ALL';
+                                    b.classList.toggle('bg-slate-900', active);
+                                    b.classList.toggle('text-white', active);
+                                    b.classList.toggle('shadow-sm', active);
+                                    b.classList.toggle('bg-slate-100', !active);
+                                    b.classList.toggle('text-slate-700', !active);
+                                });
+                                renderChoroplethLayer();
+                            }
+                            selectFeature(found);
+                            state.geoLayer.eachLayer(l => {
+                                if (String(l.feature.properties.code) === code) {
+                                    state.map.fitBounds(l.getBounds(), { padding: [70, 70], maxZoom: 14 });
+                                }
+                            });
+                            searchInput.value = found.properties.displayName;
+                        }
+                        searchResults.classList.add('hidden');
+                    });
+                });
+            });
+
+            clearSearch.addEventListener('click', () => {
+                searchInput.value = '';
+                searchResults.classList.add('hidden');
+                clearSearch.classList.add('hidden');
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+                    searchResults.classList.add('hidden');
+                }
+            });
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            initMap();
+            initUIControls();
+            await fetchIleDeFranceData();
+            buildInteractiveLegend();
+            renderChoroplethLayer();
+        });
+    </script>
+</body>
+</html>
